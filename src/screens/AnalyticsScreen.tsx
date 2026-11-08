@@ -8,8 +8,9 @@ export function AnalyticsScreen() {
   const { hourlyHistory, dailyHistory, telemetry } = useTelemetry();
   const [activeTab, setActiveTab] = useState<'hourly' | 'daily'>('hourly');
 
-  const maxDailySolar = Math.max(...dailyHistory.map((d) => d.solarKWh));
-  const maxHourlySolar = Math.max(...hourlyHistory.map((h) => Math.max(h.solarW, h.loadW)));
+  const maxDailySolar = Math.max(1, ...dailyHistory.map((d) => d.solarKWh));
+  const maxHourlySolar = Math.max(1, ...hourlyHistory.map((h) => Math.max(h.solarW, h.loadW)));
+  const hasHistory = hourlyHistory.length > 0 || dailyHistory.length > 0;
 
   const totalWeeklySolar = dailyHistory.reduce((acc, d) => acc + d.solarKWh, 0);
   const totalWeeklyLoad = dailyHistory.reduce((acc, d) => acc + d.loadKWh, 0);
@@ -72,7 +73,11 @@ export function AnalyticsScreen() {
             </View>
           </View>
 
-          {activeTab === 'hourly' ? (
+          {activeTab === 'hourly' && hourlyHistory.length === 0 ? (
+            <Text style={styles.emptyState}>No historical meter data has been recorded.</Text>
+          ) : activeTab === 'daily' && dailyHistory.length === 0 ? (
+            <Text style={styles.emptyState}>No historical meter data has been recorded.</Text>
+          ) : activeTab === 'hourly' ? (
             /* Hourly Bar Visualizer */
             <View style={styles.barsContainer}>
               {hourlyHistory.map((item, index) => {
@@ -110,6 +115,7 @@ export function AnalyticsScreen() {
           )}
         </View>
 
+        {hasHistory && <>
         {/* Key Performance Indicators */}
         <Text style={styles.sectionHeader}>PERFORMANCE METRICS</Text>
         <View style={styles.metricsGrid}>
@@ -162,6 +168,7 @@ export function AnalyticsScreen() {
             </Text>
           </View>
         </View>
+        </>}
       </ScrollView>
     </SafeAreaView>
   );
@@ -207,6 +214,7 @@ const styles = StyleSheet.create({
     borderColor: '#1e293b',
     marginBottom: 20,
   },
+  emptyState: { color: '#94a3b8', fontSize: 12, textAlign: 'center', paddingVertical: 48 },
   chartHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',

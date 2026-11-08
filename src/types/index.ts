@@ -1,19 +1,19 @@
 export interface LiveTelemetry {
-  voltageV: number;
-  currentA: number;
-  activePowerW: number;
-  frequencyHz: number;
-  powerFactor: number;
-  solarPowerW: number;
-  loadPowerW: number;
-  netPowerW: number;
-  exportEnergyKWh: number;
-  importEnergyKWh: number;
-  solarTotalYieldKWh: number;
-  batteryVoltageV: number;
-  batterySocPercent: number;
-  inverterRelay: boolean;
-  gridRelay: boolean;
+  voltageV: number | null;
+  currentA: number | null;
+  activePowerW: number | null;
+  frequencyHz: number | null;
+  powerFactor: number | null;
+  solarPowerW: number | null;
+  loadPowerW: number | null;
+  netPowerW: number | null;
+  exportEnergyKWh: number | null;
+  importEnergyKWh: number | null;
+  meterEnergyKWh: number | null;
+  batteryVoltageV: number | null;
+  batterySocPercent: number | null;
+  inverterRelay: boolean | null;
+  gridRelay: boolean | null;
   timestamp: string;
 }
 

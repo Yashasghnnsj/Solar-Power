@@ -1,102 +1,193 @@
 /**
- * ESP32 Net-Metering Telemetry Service
+ * ESP32 Net-Meter Telemetry Service
  * Connects via WebSocket to the ESP32 IP address on the local network.
  */
 import { LiveTelemetry } from '../types';
 
+export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
+
+type StatusCallback = (status: ConnectionStatus, error?: string) => void;
+
+const numericFields = [
+  'voltageV',
+  'currentA',
+  'activePowerW',
+  'frequencyHz',
+  'powerFactor',
+  'solarPowerW',
+  'loadPowerW',
+  'netPowerW',
+  'exportEnergyKWh',
+  'importEnergyKWh',
+  'meterEnergyKWh',
+  'batteryVoltageV',
+  'batterySocPercent',
+] as const;
+
+const booleanFields = ['inverterRelay', 'gridRelay'] as const;
+
+function parseTelemetry(value: unknown): LiveTelemetry | null {
+  if (!value || typeof value !== 'object') return null;
+
+  const data = value as Record<string, unknown>;
+  const hasValidNumbers = numericFields.every((field) => {
+    const reading = data[field];
+    return reading === null || (typeof reading === 'number' && Number.isFinite(reading));
+  });
+  const hasValidRelays = booleanFields.every((field) =>
+    data[field] === null || typeof data[field] === 'boolean'
+  );
+
+  if (!hasValidNumbers || !hasValidRelays) return null;
+
+  return {
+    ...(data as Omit<LiveTelemetry, 'timestamp'>),
+    timestamp: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString(),
+  };
+}
+
 export class ESP32Service {
   private socket: WebSocket | null = null;
-  private ipAddress: string = '192.168.1.150';
-  private reconnectInterval: any = null;
+  private ipAddress = '192.168.1.150';
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private connectionTimer: ReturnType<typeof setTimeout> | null = null;
+  private active = false;
   private onMessageCallback: ((data: LiveTelemetry) => void) | null = null;
-  private onStatusCallback: ((connected: boolean) => void) | null = null;
+  private onStatusCallback: StatusCallback | null = null;
 
   public setIpAddress(ip: string) {
     this.ipAddress = ip;
-    if (this.socket) {
-      this.disconnect();
-      if (this.onMessageCallback && this.onStatusCallback) {
-        this.connect(this.onMessageCallback, this.onStatusCallback);
-      }
-    }
   }
 
   public getIpAddress(): string {
     return this.ipAddress;
   }
 
-  public connect(
-    onMessage: (data: LiveTelemetry) => void,
-    onStatusChange: (connected: boolean) => void
-  ) {
+  public connect(onMessage: (data: LiveTelemetry) => void, onStatusChange: StatusCallback) {
+    this.disconnect();
     this.onMessageCallback = onMessage;
     this.onStatusCallback = onStatusChange;
+    this.active = true;
+    this.openSocket();
+  }
 
+  private openSocket() {
+    if (!this.active) return;
+
+    this.onStatusCallback?.('connecting');
+    let socket: WebSocket;
     try {
-      this.socket = new WebSocket(`ws://${this.ipAddress}:81`);
-
-      this.socket.onopen = () => {
-        console.log('[ESP32] Connected via WebSocket to ' + this.ipAddress);
-        onStatusChange(true);
-      };
-
-      this.socket.onmessage = (event) => {
-        try {
-          const telemetry: LiveTelemetry = JSON.parse(event.data);
-          onMessage(telemetry);
-        } catch (e) {
-          console.error('[ESP32] Error parsing JSON telemetry:', e);
-        }
-      };
-
-      this.socket.onclose = () => {
-        console.log('[ESP32] Disconnected');
-        onStatusChange(false);
-      };
-
-      this.socket.onerror = (err) => {
-        console.warn('[ESP32] WebSocket error, fallback to simulated stream:', err);
-        onStatusChange(false);
-      };
-    } catch (e) {
-      console.warn('[ESP32] Connection failed, running in test mode');
-      onStatusChange(false);
+      socket = new WebSocket(`ws://${this.ipAddress}:81`);
+    } catch (error) {
+      console.error('[ESP32] Could not create WebSocket:', error);
+      this.onStatusCallback?.('disconnected', `Could not connect to ${this.ipAddress}:81.`);
+      this.scheduleReconnect();
+      return;
     }
+
+    this.socket = socket;
+    this.armTelemetryTimeout(socket);
+
+    socket.onopen = () => {
+      console.log(`[ESP32] WebSocket opened to ${this.ipAddress}; waiting for telemetry`);
+    };
+
+    socket.onmessage = (event) => {
+      let payload: unknown;
+      try {
+        payload = JSON.parse(event.data);
+      } catch (error) {
+        console.error('[ESP32] Invalid JSON telemetry:', error);
+        return;
+      }
+
+      const telemetry = parseTelemetry(payload);
+      if (!telemetry) {
+        console.error('[ESP32] Received telemetry with an invalid shape');
+        return;
+      }
+
+      this.armTelemetryTimeout(socket);
+      this.onMessageCallback?.(telemetry);
+      this.onStatusCallback?.('connected');
+    };
+
+    socket.onclose = () => {
+      if (this.socket !== socket) return;
+      this.socket = null;
+      if (this.connectionTimer) {
+        clearTimeout(this.connectionTimer);
+        this.connectionTimer = null;
+      }
+      this.onStatusCallback?.(
+        'disconnected',
+        `Can't reach ${this.ipAddress}:81. Check the ESP32 IP and make sure both devices are on the same Wi-Fi.`
+      );
+      this.scheduleReconnect();
+    };
+
+    socket.onerror = (error) => {
+      console.warn('[ESP32] WebSocket connection error:', error);
+    };
+  }
+
+  private armTelemetryTimeout(socket: WebSocket) {
+    if (this.connectionTimer) clearTimeout(this.connectionTimer);
+    this.connectionTimer = setTimeout(() => {
+      if (this.socket !== socket || socket.readyState === WebSocket.CLOSED) return;
+      this.onStatusCallback?.(
+        'disconnected',
+        `No recent telemetry from ${this.ipAddress}:81. Check the ESP32 firmware and network.`
+      );
+      socket.close();
+    }, 8000);
+  }
+
+  private scheduleReconnect() {
+    if (!this.active || this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.openSocket();
+    }, 2000);
   }
 
   public disconnect() {
-    if (this.reconnectInterval) {
-      clearInterval(this.reconnectInterval);
-      this.reconnectInterval = null;
+    this.active = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.connectionTimer) {
+      clearTimeout(this.connectionTimer);
+      this.connectionTimer = null;
     }
     if (this.socket) {
-      try {
-        this.socket.close();
-      } catch (e) {
-        // ignore
-      }
+      const socket = this.socket;
       this.socket = null;
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onclose = null;
+      socket.onerror = null;
+      socket.close();
     }
   }
 
   public sendRelayCommand(relay: 'inverter' | 'grid', state: boolean) {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      const payload = JSON.stringify({
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({
         action: 'set_relay',
         target: relay,
-        state: state ? 1 : 0
-      });
-      this.socket.send(payload);
+        state: state ? 1 : 0,
+      }));
     }
   }
 
   public sendCalibrationReset(target: 'energy' | 'all') {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      const payload = JSON.stringify({
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({
         action: 'reset_counter',
-        target: target
-      });
-      this.socket.send(payload);
+        target,
+      }));
     }
   }
 }

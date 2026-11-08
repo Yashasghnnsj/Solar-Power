@@ -12,16 +12,24 @@ export function BillingScreen() {
   const [fixedChargeInput, setFixedChargeInput] = useState(tariff.fixedMonthlyCharge.toString());
 
   // Computations
-  const importCost = telemetry.importEnergyKWh * tariff.importRatePerKWh;
-  const exportCredit = telemetry.exportEnergyKWh * tariff.exportCreditPerKWh;
-  const grossSelfConsumption = Math.max(0, telemetry.solarTotalYieldKWh - telemetry.exportEnergyKWh);
-  const directSelfConsumptionSavings = grossSelfConsumption * tariff.importRatePerKWh;
-  const totalFinancialBenefit = directSelfConsumptionSavings + exportCredit;
-  const netPayableBill = Math.max(0, tariff.fixedMonthlyCharge + importCost - exportCredit);
-
-  // Environmental offset (Approx 0.85 kg CO2 per kWh solar generated)
-  const co2SavedKg = (telemetry.solarTotalYieldKWh * 0.82).toFixed(1);
-  const equivalentTrees = (parseFloat(co2SavedKg) / 21.7).toFixed(1); // 1 tree ~ 21.7kg CO2/year
+  const importCost = telemetry.importEnergyKWh === null
+    ? null
+    : telemetry.importEnergyKWh * tariff.importRatePerKWh;
+  const exportCredit = telemetry.exportEnergyKWh === null
+    ? null
+    : telemetry.exportEnergyKWh * tariff.exportCreditPerKWh;
+  const grossSelfConsumption = telemetry.meterEnergyKWh === null || telemetry.exportEnergyKWh === null
+    ? null
+    : Math.max(0, telemetry.meterEnergyKWh - telemetry.exportEnergyKWh);
+  const directSelfConsumptionSavings = grossSelfConsumption === null
+    ? null
+    : grossSelfConsumption * tariff.importRatePerKWh;
+  const totalFinancialBenefit = directSelfConsumptionSavings === null || exportCredit === null
+    ? null
+    : directSelfConsumptionSavings + exportCredit;
+  const netPayableBill = importCost === null || exportCredit === null
+    ? null
+    : Math.max(0, tariff.fixedMonthlyCharge + importCost - exportCredit);
 
   const handleSaveTariff = () => {
     const importRate = parseFloat(importRateInput) || 0;
@@ -52,16 +60,20 @@ export function BillingScreen() {
           <Text style={styles.heroLabel}>ESTIMATED NET UTILITY PAYABLE</Text>
           <Text style={styles.heroAmount}>
             {tariff.currencySymbol}
-            {netPayableBill.toFixed(2)}
+            {netPayableBill === null ? '—' : netPayableBill.toFixed(2)}
           </Text>
           <Text style={styles.heroSub}>
-            Includes {tariff.currencySymbol}{tariff.fixedMonthlyCharge.toFixed(0)} fixed meter charge
+            {netPayableBill === null
+              ? 'Import/export meters are required to estimate the bill'
+              : `Includes ${tariff.currencySymbol}${tariff.fixedMonthlyCharge.toFixed(0)} fixed meter charge`}
           </Text>
 
           <View style={styles.savingsBadge}>
             <Sparkles color="#10b981" size={16} />
             <Text style={styles.savingsText}>
-              Total Solar Benefit: {tariff.currencySymbol}{totalFinancialBenefit.toFixed(2)}
+              Total Solar Benefit: {totalFinancialBenefit === null
+                ? '—'
+                : `${tariff.currencySymbol}${totalFinancialBenefit.toFixed(2)}`}
             </Text>
           </View>
         </View>
@@ -73,11 +85,13 @@ export function BillingScreen() {
             <View>
               <Text style={styles.rowTitle}>Grid Import Energy</Text>
               <Text style={styles.rowSub}>
-                {telemetry.importEnergyKWh.toFixed(2)} kWh @ {tariff.currencySymbol}{tariff.importRatePerKWh}/kWh
+                {telemetry.importEnergyKWh === null
+                  ? 'Not measured'
+                  : `${telemetry.importEnergyKWh.toFixed(2)} kWh @ ${tariff.currencySymbol}${tariff.importRatePerKWh}/kWh`}
               </Text>
             </View>
             <Text style={[styles.rowAmount, { color: '#f59e0b' }]}>
-              +{tariff.currencySymbol}{importCost.toFixed(2)}
+              {importCost === null ? '—' : `+${tariff.currencySymbol}${importCost.toFixed(2)}`}
             </Text>
           </View>
 
@@ -87,11 +101,13 @@ export function BillingScreen() {
             <View>
               <Text style={styles.rowTitle}>Solar Export Feed-in Credit</Text>
               <Text style={styles.rowSub}>
-                {telemetry.exportEnergyKWh.toFixed(2)} kWh @ {tariff.currencySymbol}{tariff.exportCreditPerKWh}/kWh
+                {telemetry.exportEnergyKWh === null
+                  ? 'Not measured'
+                  : `${telemetry.exportEnergyKWh.toFixed(2)} kWh @ ${tariff.currencySymbol}${tariff.exportCreditPerKWh}/kWh`}
               </Text>
             </View>
             <Text style={[styles.rowAmount, { color: '#10b981' }]}>
-              -{tariff.currencySymbol}{exportCredit.toFixed(2)}
+              {exportCredit === null ? '—' : `-${tariff.currencySymbol}${exportCredit.toFixed(2)}`}
             </Text>
           </View>
 
@@ -115,7 +131,7 @@ export function BillingScreen() {
               <Text style={styles.rowSub}>Final payable after solar credit deductions</Text>
             </View>
             <Text style={[styles.rowAmount, { fontSize: 18, color: '#38bdf8' }]}>
-              {tariff.currencySymbol}{netPayableBill.toFixed(2)}
+              {netPayableBill === null ? '—' : `${tariff.currencySymbol}${netPayableBill.toFixed(2)}`}
             </Text>
           </View>
         </View>
@@ -125,13 +141,13 @@ export function BillingScreen() {
         <View style={styles.ecoCard}>
           <View style={styles.ecoItem}>
             <Leaf color="#10b981" size={24} />
-            <Text style={styles.ecoVal}>{co2SavedKg} kg</Text>
+            <Text style={styles.ecoVal}>—</Text>
             <Text style={styles.ecoLbl}>CO₂ Prevented</Text>
           </View>
           <View style={styles.ecoDivider} />
           <View style={styles.ecoItem}>
             <Text style={styles.treeEmoji}>🌳</Text>
-            <Text style={styles.ecoVal}>{equivalentTrees}</Text>
+            <Text style={styles.ecoVal}>—</Text>
             <Text style={styles.ecoLbl}>Trees Equivalent</Text>
           </View>
         </View>

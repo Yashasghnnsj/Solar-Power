@@ -5,8 +5,14 @@ import { Sun, Home, ArrowUpRight, ArrowDownLeft, Battery } from 'lucide-react-na
 import { useTelemetry } from '../context/TelemetryContext';
 
 export function DashboardScreen() {
-  const { telemetry, isConnected } = useTelemetry();
-  const isExporting = telemetry.netPowerW > 0;
+  const { telemetry, connectionStatus } = useTelemetry();
+  const isExporting = telemetry.netPowerW !== null && telemetry.netPowerW > 0;
+  const statusLabel = connectionStatus === 'connected'
+    ? 'LIVE ESP32'
+    : connectionStatus === 'connecting' ? 'CONNECTING' : 'OFFLINE';
+  const statusStyle = connectionStatus === 'connected'
+    ? styles.badgeOnline
+    : connectionStatus === 'connecting' ? styles.badgeOffline : styles.badgeDisconnected;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -17,9 +23,9 @@ export function DashboardScreen() {
             <Text style={styles.appTitle}>PV Smart Net-Meter</Text>
             <Text style={styles.subTitle}>ESP32 + PZEM-004T v3.0 Live Stream</Text>
           </View>
-          <View style={[styles.statusBadge, isConnected ? styles.badgeOnline : styles.badgeOffline]}>
-            <View style={[styles.dot, isConnected ? styles.dotGreen : styles.dotAmber]} />
-            <Text style={styles.badgeText}>{isConnected ? 'LIVE ESP32' : 'SIMULATION'}</Text>
+          <View style={[styles.statusBadge, statusStyle]}>
+            <View style={[styles.dot, connectionStatus === 'connected' ? styles.dotGreen : styles.dotAmber]} />
+            <Text style={styles.badgeText}>{statusLabel}</Text>
           </View>
         </View>
 
@@ -28,33 +34,39 @@ export function DashboardScreen() {
           <View style={styles.flowHeader}>
             <Text style={styles.flowLabel}>NET POWER FLOW</Text>
             <Text style={[styles.flowState, isExporting ? styles.textGreen : styles.textAmber]}>
-              {isExporting ? 'SURPLUS EXPORTING' : 'GRID IMPORTING'}
+              {telemetry.netPowerW === null
+                ? 'NOT MEASURED'
+                : isExporting ? 'SURPLUS EXPORTING' : 'GRID IMPORTING'}
             </Text>
           </View>
 
           <Text style={[styles.heroWattage, isExporting ? styles.textGreen : styles.textAmber]}>
-            {isExporting ? `+${telemetry.netPowerW.toFixed(0)}` : telemetry.netPowerW.toFixed(0)} W
+            {telemetry.netPowerW === null
+              ? '—'
+              : `${isExporting ? '+' : ''}${telemetry.netPowerW.toFixed(0)} W`}
           </Text>
           <Text style={styles.formulaText}>
-            P_net = P_solar ({telemetry.solarPowerW}W) - P_load ({telemetry.loadPowerW}W)
+            Net solar/load power requires separate meters
           </Text>
 
           {/* Quick Subsystem Nodes */}
           <View style={styles.nodeGrid}>
             <View style={styles.nodeItem}>
               <Sun color="#f59e0b" size={20} />
-              <Text style={styles.nodeVal}>{telemetry.solarPowerW} W</Text>
+              <Text style={styles.nodeVal}>{telemetry.solarPowerW === null ? '—' : `${telemetry.solarPowerW} W`}</Text>
               <Text style={styles.nodeLbl}>Solar PV</Text>
             </View>
             <View style={styles.nodeItem}>
               <Home color="#38bdf8" size={20} />
-              <Text style={styles.nodeVal}>{telemetry.loadPowerW} W</Text>
+              <Text style={styles.nodeVal}>{telemetry.loadPowerW === null ? '—' : `${telemetry.loadPowerW} W`}</Text>
               <Text style={styles.nodeLbl}>Household</Text>
             </View>
             <View style={styles.nodeItem}>
               <Battery color="#10b981" size={20} />
-              <Text style={styles.nodeVal}>{telemetry.batteryVoltageV.toFixed(1)} V</Text>
-              <Text style={styles.nodeLbl}>Battery SOC {telemetry.batterySocPercent}%</Text>
+              <Text style={styles.nodeVal}>{telemetry.batteryVoltageV === null ? '—' : `${telemetry.batteryVoltageV.toFixed(1)} V`}</Text>
+              <Text style={styles.nodeLbl}>
+                {telemetry.batterySocPercent === null ? 'Battery SOC —' : `Battery SOC ${telemetry.batterySocPercent}%`}
+              </Text>
             </View>
           </View>
         </View>
@@ -65,7 +77,7 @@ export function DashboardScreen() {
           <View style={styles.dialCard}>
             <Text style={styles.dialLabel}>MAINS VOLTAGE</Text>
             <Text style={styles.dialValue}>
-              {telemetry.voltageV.toFixed(1)} <Text style={styles.unit}>V</Text>
+              {telemetry.voltageV === null ? '—' : telemetry.voltageV.toFixed(1)} <Text style={styles.unit}>V</Text>
             </Text>
             <Text style={styles.dialSub}>Nominal: 230V ±5%</Text>
           </View>
@@ -73,7 +85,7 @@ export function DashboardScreen() {
           <View style={styles.dialCard}>
             <Text style={styles.dialLabel}>RMS CURRENT</Text>
             <Text style={styles.dialValue}>
-              {telemetry.currentA.toFixed(2)} <Text style={styles.unit}>A</Text>
+              {telemetry.currentA === null ? '—' : telemetry.currentA.toFixed(2)} <Text style={styles.unit}>A</Text>
             </Text>
             <Text style={styles.dialSub}>CT Split-Core 100A</Text>
           </View>
@@ -81,15 +93,17 @@ export function DashboardScreen() {
           <View style={styles.dialCard}>
             <Text style={styles.dialLabel}>ACTIVE POWER</Text>
             <Text style={styles.dialValue}>
-              {telemetry.activePowerW.toFixed(0)} <Text style={styles.unit}>W</Text>
+              {telemetry.activePowerW === null ? '—' : telemetry.activePowerW.toFixed(0)} <Text style={styles.unit}>W</Text>
             </Text>
-            <Text style={styles.dialSub}>PF: {telemetry.powerFactor.toFixed(2)}</Text>
+            <Text style={styles.dialSub}>
+              PF: {telemetry.powerFactor === null ? '—' : telemetry.powerFactor.toFixed(2)}
+            </Text>
           </View>
 
           <View style={styles.dialCard}>
             <Text style={styles.dialLabel}>FREQUENCY</Text>
             <Text style={styles.dialValue}>
-              {telemetry.frequencyHz.toFixed(1)} <Text style={styles.unit}>Hz</Text>
+              {telemetry.frequencyHz === null ? '—' : telemetry.frequencyHz.toFixed(1)} <Text style={styles.unit}>Hz</Text>
             </Text>
             <Text style={styles.dialSub}>Grid Synchronized</Text>
           </View>
@@ -100,24 +114,30 @@ export function DashboardScreen() {
         <View style={styles.countersRow}>
           <View style={[styles.counterBox, { borderColor: '#10b981' }]}>
             <ArrowUpRight color="#10b981" size={22} />
-            <Text style={styles.counterVal}>{telemetry.exportEnergyKWh.toFixed(2)} kWh</Text>
-            <Text style={styles.counterLbl}>Total Exported to Grid</Text>
+            <Text style={styles.counterVal}>
+              {telemetry.exportEnergyKWh === null ? '—' : `${telemetry.exportEnergyKWh.toFixed(2)} kWh`}
+            </Text>
+            <Text style={styles.counterLbl}>Export energy (meter required)</Text>
           </View>
 
           <View style={[styles.counterBox, { borderColor: '#f59e0b' }]}>
             <ArrowDownLeft color="#f59e0b" size={22} />
-            <Text style={styles.counterVal}>{telemetry.importEnergyKWh.toFixed(2)} kWh</Text>
-            <Text style={styles.counterLbl}>Total Imported from Grid</Text>
+            <Text style={styles.counterVal}>
+              {telemetry.importEnergyKWh === null ? '—' : `${telemetry.importEnergyKWh.toFixed(2)} kWh`}
+            </Text>
+            <Text style={styles.counterLbl}>Import energy (meter required)</Text>
           </View>
         </View>
 
         {/* Solar Generation Yield Card */}
         <View style={styles.yieldCard}>
           <View style={styles.yieldHeader}>
-            <Text style={styles.yieldLabel}>TOTAL SOLAR GENERATION</Text>
-            <Text style={styles.yieldValue}>{telemetry.solarTotalYieldKWh.toFixed(2)} kWh</Text>
+            <Text style={styles.yieldLabel}>PZEM METER ENERGY</Text>
+            <Text style={styles.yieldValue}>
+              {telemetry.meterEnergyKWh === null ? '—' : `${telemetry.meterEnergyKWh.toFixed(2)} kWh`}
+            </Text>
           </View>
-          <Text style={styles.yieldSub}>Direct inverter MPPT accumulated energy yield</Text>
+          <Text style={styles.yieldSub}>Cumulative energy reported by the connected PZEM sensor</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -133,6 +153,7 @@ const styles = StyleSheet.create({
   statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   badgeOnline: { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderWidth: 1, borderColor: '#10b981' },
   badgeOffline: { backgroundColor: 'rgba(245, 158, 11, 0.15)', borderWidth: 1, borderColor: '#f59e0b' },
+  badgeDisconnected: { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderWidth: 1, borderColor: '#ef4444' },
   dot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
   dotGreen: { backgroundColor: '#10b981' },
   dotAmber: { backgroundColor: '#f59e0b' },

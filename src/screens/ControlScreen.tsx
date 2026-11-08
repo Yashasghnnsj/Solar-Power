@@ -8,6 +8,8 @@ export function ControlScreen() {
   const {
     telemetry,
     isConnected,
+    connectionStatus,
+    connectionError,
     espIp,
     setEspIp,
     toggleRelay,
@@ -19,18 +21,22 @@ export function ControlScreen() {
   const [ipInput, setIpInput] = useState(espIp);
 
   const handleUpdateIp = () => {
-    if (!ipInput.trim()) {
+    const ip = ipInput.trim();
+    const octets = ip.split('.');
+    if (
+      octets.length !== 4 ||
+      octets.some((octet) => !/^\d+$/.test(octet) || Number(octet) > 255)
+    ) {
       Alert.alert('Invalid IP', 'Please enter a valid IP address for the ESP32.');
       return;
     }
-    setEspIp(ipInput.trim());
-    Alert.alert('ESP32 Target Updated', `Connecting to ws://${ipInput.trim()}:81`);
+    setEspIp(ip);
   };
 
   const confirmResetCounters = () => {
     Alert.alert(
       'Reset Energy Counters',
-      'Are you sure you want to reset the accumulated Import, Export, and Solar kWh registers on the PZEM-004T module?',
+      'Are you sure you want to reset the PZEM-004T energy register?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -38,7 +44,7 @@ export function ControlScreen() {
           style: 'destructive',
           onPress: () => {
             resetEnergyCounters();
-            Alert.alert('Counters Reset', 'Accumulated energy registers reset to 0.00 kWh.');
+            Alert.alert('Reset Command Sent', 'The PZEM reading will update when the ESP32 sends its next telemetry packet.');
           },
         },
       ]
@@ -62,8 +68,19 @@ export function ControlScreen() {
               <Wifi color={isConnected ? '#10b981' : '#f59e0b'} size={18} />
               <Text style={styles.cardLabel}>WebSocket IP Target</Text>
             </View>
-            <View style={[styles.statusTag, isConnected ? styles.tagGreen : styles.tagAmber]}>
-              <Text style={styles.statusTagText}>{isConnected ? 'CONNECTED' : 'SIMULATION'}</Text>
+            <View
+              style={[
+                styles.statusTag,
+                connectionStatus === 'connected'
+                  ? styles.tagGreen
+                  : connectionStatus === 'connecting' ? styles.tagAmber : styles.tagRed,
+              ]}
+            >
+              <Text style={styles.statusTagText}>
+                {connectionStatus === 'connected'
+                  ? 'CONNECTED'
+                  : connectionStatus === 'connecting' ? 'CONNECTING' : 'OFFLINE'}
+              </Text>
             </View>
           </View>
 
@@ -81,7 +98,9 @@ export function ControlScreen() {
               <Text style={styles.connectButtonText}>Connect</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.hintText}>ESP32 default WebSocket port is 81 (ws://{espIp}:81)</Text>
+          <Text style={styles.hintText}>
+            {connectionError ?? `WebSocket: ws://${espIp}:81`}
+          </Text>
         </View>
 
         {/* Relay Actuator Controls */}
@@ -93,12 +112,15 @@ export function ControlScreen() {
               <View>
                 <Text style={styles.relayTitle}>Solar Inverter AC Relay</Text>
                 <Text style={styles.relaySub}>
-                  Status: {telemetry.inverterRelay ? 'ENERGIZED (Online)' : 'ISOLATED (Tripped)'}
+                  Status: {telemetry.inverterRelay === null
+                    ? 'Unknown'
+                    : telemetry.inverterRelay ? 'ENERGIZED (Online)' : 'ISOLATED (Tripped)'}
                 </Text>
               </View>
             </View>
             <Switch
-              value={telemetry.inverterRelay}
+              value={telemetry.inverterRelay ?? false}
+              disabled={!isConnected || telemetry.inverterRelay === null}
               onValueChange={() => toggleRelay('inverter')}
               trackColor={{ false: '#334155', true: '#10b981' }}
               thumbColor="#f8fafc"
@@ -113,12 +135,15 @@ export function ControlScreen() {
               <View>
                 <Text style={styles.relayTitle}>Grid-Tie Synchronization Relay</Text>
                 <Text style={styles.relaySub}>
-                  Status: {telemetry.gridRelay ? 'GRID TIED (Bi-directional)' : 'ISLANDED (Offline)'}
+                  Status: {telemetry.gridRelay === null
+                    ? 'Unknown'
+                    : telemetry.gridRelay ? 'GRID TIED' : 'ISLANDED'}
                 </Text>
               </View>
             </View>
             <Switch
-              value={telemetry.gridRelay}
+              value={telemetry.gridRelay ?? false}
+              disabled={!isConnected || telemetry.gridRelay === null}
               onValueChange={() => toggleRelay('grid')}
               trackColor={{ false: '#334155', true: '#38bdf8' }}
               thumbColor="#f8fafc"
@@ -134,7 +159,11 @@ export function ControlScreen() {
               <Text style={styles.registerTitle}>Reset Accumulated Energy</Text>
               <Text style={styles.registerSub}>Clears EEPROM net metering kWh registers</Text>
             </View>
-            <TouchableOpacity style={styles.resetButton} onPress={confirmResetCounters}>
+            <TouchableOpacity
+              style={[styles.resetButton, !isConnected && styles.disabledButton]}
+              onPress={confirmResetCounters}
+              disabled={!isConnected}
+            >
               <RotateCcw color="#ef4444" size={14} />
               <Text style={styles.resetButtonText}>Reset</Text>
             </TouchableOpacity>
@@ -147,7 +176,7 @@ export function ControlScreen() {
           <View style={styles.card}>
             <View style={styles.allClearRow}>
               <CheckCircle2 color="#10b981" size={18} />
-              <Text style={styles.allClearText}>All systems normal. No active warnings.</Text>
+              <Text style={styles.allClearText}>No device alerts have been received.</Text>
             </View>
           </View>
         ) : (
@@ -236,6 +265,9 @@ const styles = StyleSheet.create({
   },
   tagAmber: {
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
+  },
+  tagRed: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
   },
   statusTagText: {
     fontSize: 9,
@@ -328,6 +360,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 6,
   },
+  disabledButton: { opacity: 0.45 },
   resetButtonText: {
     fontSize: 11,
     fontWeight: '700',

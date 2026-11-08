@@ -25,7 +25,7 @@ A modern mobile telemetry and control dashboard for **Solar PV Bi-Directional Ne
    - Carbon offset calculator (CO₂ saved in kg & trees equivalent)
 
 4. **System & Hardware Controls (`Controls` Tab)**
-   - ESP32 local network IP bridge configuration (`ws://<IP>:81`)
+   - ESP32 local network IP configuration (`ws://<IP>:81`) with automatic reconnect
    - Solid-state relay control for Solar Inverter and Grid-Tie synchronization
    - PZEM-004T EEPROM counter reset with confirmation dialogs
    - System alert feed and hardware diagnostic metrics
@@ -34,20 +34,39 @@ A modern mobile telemetry and control dashboard for **Solar PV Bi-Directional Ne
 
 ## 🚀 Quick Start Guide
 
-### 1. Install Dependencies
+### 1. Configure and flash the ESP32
+
+In `esp32_firmware/esp32_smart_meter.ino`, replace `YOUR_WIFI_SSID` and
+`YOUR_WIFI_PASSWORD` with the credentials for a 2.4 GHz Wi-Fi network. Flash
+the sketch and open the serial monitor at 115200 baud to read the ESP32's IP
+address. The phone and ESP32 must be on the same local network; guest Wi-Fi or
+client isolation can prevent them from communicating.
+
+Install the Arduino libraries used by the sketch: **WebSockets** by Markus
+Sattler, **PZEM004Tv30**, and **ArduinoJson**.
+
+### 2. Install app dependencies
 ```bash
 npm install
 ```
 
-### 2. Start the Expo Development Server
+### 3. Build and run the Android app
 ```bash
-npx expo start
+npm run android
 ```
 
-### 3. Open on Your Phone
-- Download the **Expo Go** app from Google Play Store or Apple App Store.
-- Scan the QR code displayed in your terminal using the Expo Go app (Android) or the Camera app (iOS).
-- You can also press `w` to preview in the web browser.
+The Android manifest allows cleartext traffic for the local `ws://` connection;
+rebuild the native app after changing native configuration. In the app's
+**Controls** tab, enter the IP printed by the ESP32 and tap **Connect**. The app
+retries automatically and shows connection errors instead of substituting
+simulated readings.
+
+The app only displays readings the connected hardware reports. A single
+PZEM-004T cannot separately measure solar generation, household load,
+import/export energy, or battery state, so those values appear as unavailable.
+Use additional appropriately placed meters/sensors and extend the firmware
+before relying on those measurements. Analytics remain empty until historical
+storage is implemented.
 
 ---
 
@@ -62,7 +81,7 @@ pv-smart-netmeter/
 ├── tsconfig.json                # TypeScript strict configuration
 ├── src/
 │   ├── context/
-│   │   └── TelemetryContext.tsx # Central telemetry provider & simulation fallback
+│   │   └── TelemetryContext.tsx # Live telemetry and connection state
 │   ├── screens/
 │   │   ├── DashboardScreen.tsx  # Live power flow & electrical dials
 │   │   ├── AnalyticsScreen.tsx  # Generation vs load analytics & KPI charts
