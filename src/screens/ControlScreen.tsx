@@ -89,7 +89,7 @@ export function ControlScreen() {
               style={styles.ipInput}
               value={ipInput}
               onChangeText={setIpInput}
-              placeholder="192.168.1.150"
+              placeholder="192.168.4.1"
               placeholderTextColor="#64748b"
               autoCapitalize="none"
               autoCorrect={false}

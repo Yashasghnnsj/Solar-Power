@@ -48,7 +48,7 @@ function parseTelemetry(value: unknown): LiveTelemetry | null {
 
 export class ESP32Service {
   private socket: WebSocket | null = null;
-  private ipAddress = '192.168.1.150';
+  private ipAddress = '192.168.4.1';
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private connectionTimer: ReturnType<typeof setTimeout> | null = null;
   private active = false;
