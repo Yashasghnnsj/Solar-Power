@@ -14,7 +14,6 @@
     },
     "android": {
       "package": "com.pvsmartnetmeter.app",
-      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#090d16"
       },
@@ -31,6 +30,16 @@
       "eas": {
         "projectId": "0510ba4f-8673-4e55-972c-f69dae900a8b"
       }
-    }
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ]
   }
 }
