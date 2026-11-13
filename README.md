@@ -68,6 +68,10 @@ Use additional appropriately placed meters/sensors and extend the firmware
 before relying on those measurements. Analytics remain empty until historical
 storage is implemented.
 
+The WebSocket parser accepts both the current camelCase telemetry keys and
+legacy firmware keys such as `mains_voltage` and `total_export`. If legacy
+telemetry omits `meterEnergyKWh`, the app shows that reading as unavailable.
+
 ---
 
 ## 🛠️ Project Structure

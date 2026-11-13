@@ -26,22 +26,54 @@ const numericFields = [
 
 const booleanFields = ['inverterRelay', 'gridRelay'] as const;
 
+type TelemetryField = typeof numericFields[number] | typeof booleanFields[number];
+
+const legacyFieldNames: Partial<Record<TelemetryField, string>> = {
+  voltageV: 'mains_voltage',
+  currentA: 'rms_current',
+  activePowerW: 'active_power',
+  frequencyHz: 'frequency',
+  powerFactor: 'pf',
+  solarPowerW: 'p_solar',
+  loadPowerW: 'p_load',
+  netPowerW: 'p_net',
+  exportEnergyKWh: 'total_export',
+  importEnergyKWh: 'total_import',
+  batteryVoltageV: 'battery_v',
+  batterySocPercent: 'battery_soc',
+  inverterRelay: 'relay_inverter',
+  gridRelay: 'relay_grid',
+};
+
 function parseTelemetry(value: unknown): LiveTelemetry | null {
   if (!value || typeof value !== 'object') return null;
 
   const data = value as Record<string, unknown>;
+  const normalized: Record<string, unknown> = {};
+  const readField = (field: TelemetryField) => {
+    if (Object.prototype.hasOwnProperty.call(data, field)) return data[field];
+    const legacyField = legacyFieldNames[field];
+    if (legacyField && Object.prototype.hasOwnProperty.call(data, legacyField)) {
+      return data[legacyField];
+    }
+    return field === 'meterEnergyKWh' ? null : undefined;
+  };
+
   const hasValidNumbers = numericFields.every((field) => {
-    const reading = data[field];
+    const reading = readField(field);
+    normalized[field] = reading;
     return reading === null || (typeof reading === 'number' && Number.isFinite(reading));
   });
-  const hasValidRelays = booleanFields.every((field) =>
-    data[field] === null || typeof data[field] === 'boolean'
-  );
+  const hasValidRelays = booleanFields.every((field) => {
+    const reading = readField(field);
+    normalized[field] = reading;
+    return reading === null || typeof reading === 'boolean';
+  });
 
   if (!hasValidNumbers || !hasValidRelays) return null;
 
   return {
-    ...(data as Omit<LiveTelemetry, 'timestamp'>),
+    ...(normalized as Omit<LiveTelemetry, 'timestamp'>),
     timestamp: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString(),
   };
 }
